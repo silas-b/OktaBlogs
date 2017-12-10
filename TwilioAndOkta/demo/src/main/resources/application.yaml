@@ -1,0 +1,8 @@
+okta:
+  oauth2:
+    issuer: https://dev-{okta-ID}.oktapreview.com/oauth2/default
+    clientId: {client-ID}
+    clientSecret: {client-secret}
+  client:
+    token: {client-token}
+    orgUrl: https://dev-{okta-ID}.oktapreview.com
