@@ -4,6 +4,9 @@ package com.example.demo;
 import com.okta.jwt.Jwt;
 import com.okta.jwt.JwtHelper;
 import com.okta.jwt.JwtVerifier;
+import io.vertx.config.ConfigRetriever;
+import io.vertx.config.ConfigRetrieverOptions;
+import io.vertx.config.ConfigStoreOptions;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.auth.oauth2.OAuth2Auth;
@@ -19,23 +22,18 @@ import java.util.Map;
 
 public class MainVerticle extends AbstractVerticle {
 
-    final static String OKTA_CLIENT_ID = "0oacqisv6qsvBoshD0h7";
-    final static String OKTA_CLIENT_SECRET = "v9DG9LiG96wzCSL-xvOsFLvUbcegVxW_HL2G-z6k";
-    final static String OKTA_DEV_DOMAIN = "https://dev-279161.oktapreview.com/oauth2/default";
-    final static String OKTA_CALLBACK_URL = "http://localhost:8080/login";
-
     AuthHandler getOAuthHandler(Router router){
         OAuth2Auth oauth2 = OAuth2Auth.create(vertx, OAuth2FlowType.AUTH_CODE, new OAuth2ClientOptions()
-            .setClientID(OKTA_CLIENT_ID)
-            .setClientSecret(OKTA_CLIENT_SECRET)
-            .setSite(OKTA_DEV_DOMAIN)
-            .setTokenPath("/v1/token")
-            .setAuthorizationPath("/v1/authorize")
-            .setUserInfoPath("/v1/userinfo")
-            .setUseBasicAuthorizationHeader(false)
+                .setClientID(config().getString("clientId"))
+                .setClientSecret(config().getString("clientSecret"))
+                .setSite(config().getString("issuer"))
+                .setTokenPath("/v1/token")
+                .setAuthorizationPath("/v1/authorize")
+                .setUserInfoPath("/v1/userinfo")
+                .setUseBasicAuthorizationHeader(false)
         );
 
-        OAuth2AuthHandler authHandler = OAuth2AuthHandler.create(oauth2, OKTA_CALLBACK_URL);
+        OAuth2AuthHandler authHandler = OAuth2AuthHandler.create(oauth2, config().getString("callbackUrl"));
         authHandler.extraParams(new JsonObject("{\"scope\":\"openid profile email\"}"));
         authHandler.setupCallback(router.route());
 
@@ -45,10 +43,10 @@ public class MainVerticle extends AbstractVerticle {
     Map<String, Object> getIdClaims(RoutingContext ctx) {
         try {
             JwtVerifier jwtVerifier = new JwtHelper()
-                .setIssuerUrl(OKTA_DEV_DOMAIN)
-                .setAudience("api://default")
-                .setClientId(OKTA_CLIENT_ID)
-                .build();
+                    .setIssuerUrl(config().getString("issuer"))
+                    .setAudience("api://default")
+                    .setClientId(config().getString("clientId"))
+                    .build();
 
             Jwt idTokenJwt = jwtVerifier.decodeIdToken(ctx.user().principal().getString("id_token"), null);
             return idTokenJwt.getClaims();
@@ -61,6 +59,30 @@ public class MainVerticle extends AbstractVerticle {
     @Override
     public void start() throws Exception {
 
+        ConfigStoreOptions fileStore = new ConfigStoreOptions()
+                .setType("file")
+                .setConfig(new JsonObject().put("path", "src/main/application.json"));
+
+        ConfigRetrieverOptions options = new ConfigRetrieverOptions()
+                .addStore(fileStore);
+
+        ConfigRetriever retriever = ConfigRetriever.create(vertx, options);
+
+        retriever.getConfig(ar -> {
+            if (ar.failed()) {
+
+                System.err.println("failed to retrieve config.");
+            } else {
+
+                config().mergeIn(ar.result());
+                startServer();
+            }
+        });
+    }
+
+
+    void startServer(){
+
         Router router = Router.router(vertx);
         AuthHandler authHandler = getOAuthHandler(router);
 
@@ -71,11 +93,12 @@ public class MainVerticle extends AbstractVerticle {
             Map claims = getIdClaims(ctx);
 
             ctx.response().end("Hi " +
-                                claims.get("name") +
-                                ", the email address we have on file for you is: "+
-                                claims.get("email"));
+                    claims.get("name") +
+                    ", the email address we have on file for you is: "+
+                    claims.get("email"));
         });
 
-        vertx.createHttpServer().requestHandler(router::accept).listen(8080);
+        int port = config().getInteger("port");
+        vertx.createHttpServer().requestHandler(router::accept).listen(port);
     }
 }
