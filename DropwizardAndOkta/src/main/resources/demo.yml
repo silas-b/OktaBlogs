@@ -1,0 +1,12 @@
+
+issuer: "https://dev-11111111.oktapreview.com/oauth2/default"
+
+clientId: "{your-client-id}"
+
+clientSecret: "{your-client-secret"
+
+callbackUri: "http://localhost:8080/login"
+
+
+
+
